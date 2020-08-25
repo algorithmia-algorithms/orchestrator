@@ -3,7 +3,7 @@ import numpy as np
 from threading import Thread
 from time import time
 
-ALGO_A = "algo://network_anomaly_detection/algo_a/0.1.x"
+ALGO_A = "algo://network_anomaly_detection/algo_a/0.2.x"
 ALGO_B = "algo://network_anomaly_detection/algo_b/0.1.x"
 
 client = Algorithmia.client()
@@ -16,13 +16,13 @@ class Logger():
 
     def emit_event(self, namespace, message):
         event = {'message': message, "timestamp": str(time())}
-        if namespace in self.events:
-            self.events[namespace].append(event)
-        else:
+        if namespace not in self.events:
             self.events[namespace] = []
             self.events[namespace].append(event)
 
     def emit_events(self, namespace, events):
+        if namespace not in self.events:
+            self.events[namespace] = []
         self.events[namespace] += events
 
     def emit_outcome(self, namespace, outcome):
@@ -36,9 +36,10 @@ class Logger():
 
 
 def call_algo_a(input: np.ndarray, logger: Logger):
-    formatted_input = {"features": input.tolist()}
+    formatted_input = input.tolist()
     logger.emit_event("HOST", "starting algorithm A")
-    result = client.algo(ALGO_A).pipe(formatted_input).result
+    algo_response = client.algo(ALGO_A).pipe(formatted_input)
+    result = algo_response.result
     logger.emit_event("HOST", "completed algorithm A")
     logger.emit_events("ALGO_A", result['events'])
     logger.emit_outcome("ALGO_A", result['outcome'])
@@ -46,9 +47,10 @@ def call_algo_a(input: np.ndarray, logger: Logger):
 
 
 def call_algo_b(input: np.ndarray, logger: Logger):
-    formatted_input = {"features": input.tolist()}
+    formatted_input = input.tolist()
     logger.emit_event("HOST", "starting algorithm B")
-    result = client.algo(ALGO_B).pipe(formatted_input).result
+    algo_response = client.algo(ALGO_B).pipe(formatted_input)
+    result = algo_response.result
     logger.emit_event("HOST", "completed algorithm B")
     logger.emit_events("ALGO_B", result['events'])
     logger.emit_outcome("ALGO_B", result['outcome'])
@@ -60,20 +62,20 @@ def apply(input):
     logger.emit_event("HOST", "algorithm workflow started")
     try:
         if isinstance(input, dict):
-            if "tensor" in input and isinstance(input['tensor'], list):
-                input_tensor = np.asarray(input['tensor'])
+            if "features" in input and isinstance(input['features'], list):
+                input_tensor = np.asarray(input['features'])
                 logger.emit_event('HOST', "input tensor converted successfully")
             else:
-                raise Exception("'tensor' was either not defined, or was an invalid type.")
+                raise Exception("'features' was either not defined, or was an invalid type.")
             if "device_type" in input and isinstance(input['device_type'], str):
                 if input['device_type'] == "DEVICE_A":
                     logger.emit_event('HOST', "'device_type' was 'DEVICE_A'")
-                    model_a_data = input_tensor[0:4]
-                    model_b_data = input_tensor[4:]
+                    model_a_data = input_tensor[:, 0:5]
+                    model_b_data = input_tensor[:, 5:]
                 elif input['device_type'] == "DEVICE_B":
                     logger.emit_event('HOST', "'device_type' was 'DEVICE_B'")
-                    model_a_data = input_tensor[1:5]
-                    model_b_data = input_tensor[5:]
+                    model_a_data = input_tensor[:, 1:6]
+                    model_b_data = input_tensor[:, 4:-1]
                 else:
                     raise Exception("'device_type must be 'DEVICE_A' or 'DEVICE_B'")
             else:
@@ -91,3 +93,8 @@ def apply(input):
     except Exception as e:
         logger.emit_event("HOST", str(e))
         raise e
+
+if __name__ == "__main__":
+    input = {"features": [[4.0, 3.0, 2.2, -1.1, 0.25, 0.15, -0.241, 0.05, 0.99, -0.25]], "device_type": "DEVICE_B"}
+    result = apply(input)
+    print(result)
