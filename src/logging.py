@@ -1,3 +1,5 @@
+from time import time
+
 class Logger():
     def __init__(self):
         self.events = {}

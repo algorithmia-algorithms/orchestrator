@@ -1,7 +1,6 @@
 import Algorithmia
 import numpy as np
 from threading import Thread
-from time import time
 from src.logging import  Logger
 
 ALGO_A = "algo://network_anomaly_detection/algo_a/0.2.x"
